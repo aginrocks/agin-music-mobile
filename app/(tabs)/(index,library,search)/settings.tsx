@@ -16,7 +16,7 @@ const qualityLevels: SettingSelectOption[] = [
     { label: 'Lossless', description: 'ALAC, 24-bit/48 kHz', value: 'lossless' },
 ];
 
-export type SettingId = 'audioQuality.wifi' | 'audioQuality.celluar' | 'audioQuality.download' | 'audioQuality.atmos' | 'storage.clearCache' | 'developer.copyId' | 'ui.toastPosition' | 'ui.autoFocusSearchBar';
+export type SettingId = 'audioQuality.wifi' | 'audioQuality.celluar' | 'audioQuality.download' | 'audioQuality.atmos' | 'storage.clearCache' | 'developer.copyId' | 'ui.toastPosition' | 'ui.autoFocusSearchBar' | 'ui.HideAutoCreatedPlaylist';
 
 export default function Settings() {
     const cache = useCache();
@@ -118,6 +118,13 @@ export default function Settings() {
                         type='switch'
                         label='Automatically Focus Search Bar'
                         description='Focus the search bar automatically'
+                    />
+                    <Setting 
+                        id='ui.HideAutoCreatedPlaylist'
+                        type='switch'
+                        label='Hide root playlist'
+                        description='Hide playlists created by root'
+                        defaultValue={true}
                     />
                     <SettingsSection label='Developer Options' />
                     <Setting

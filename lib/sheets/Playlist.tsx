@@ -21,6 +21,7 @@ function PlaylistSheet({ sheetId, payload }: SheetProps<'playlist'>) {
     const queue = useQueue();
 
     const copyIdEnabled = useSetting('developer.copyId');
+    const HideAutoCreatedPlaylist = useSetting('ui.HideAutoCreatedPlaylist');
 
     const pins = usePins();
     const isPinned = pins.isPinned(payload?.id ?? '');
@@ -32,7 +33,7 @@ function PlaylistSheet({ sheetId, payload }: SheetProps<'playlist'>) {
             if (!payload?.id) return;
             await memoryCache.refreshPlaylist(payload?.id);
         })();
-    }, [payload?.id, memoryCache.refreshPlaylist]);
+    }, [payload?.id, memoryCache.refreshPlaylist, HideAutoCreatedPlaylist]);
 
     return (
         <StyledActionSheet

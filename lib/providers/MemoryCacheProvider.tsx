@@ -1,6 +1,7 @@
 import { createContext, useCallback, useEffect, useState } from 'react';
 import { AlbumID3, AlbumList2, AlbumWithSongsID3, ArtistID3, ArtistsID3, Child, Playlist, PlaylistWithSongs } from '@lib/types';
-import { useApi, useServer } from '@lib/hooks';
+import { useApi, useServer, useSetting } from '@lib/hooks';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type MemoryCache = {
     allPlaylists: Playlist[];
@@ -46,6 +47,7 @@ export default function MemoryCacheProvider({ children }: { children?: React.Rea
     const [cache, setCache] = useState<MemoryCache>(initialCache.cache);
     const api = useApi();
     const { server } = useServer();
+    const HideAutoCreatedPlaylist = useSetting("ui.HideAutoCreatedPlaylist")
 
     const clear = useCallback(() => {
         setCache(initialCache.cache);
@@ -55,12 +57,23 @@ export default function MemoryCacheProvider({ children }: { children?: React.Rea
         if (!api) return;
 
         const playlistsRes = await api.get('/getPlaylists');
-        const playlists = playlistsRes.data?.['subsonic-response']?.playlists?.playlist as Playlist[];
-        if (!playlists) return;
+        
+        // Required to update the playlist after change in settings
+        const rawSetting = await AsyncStorage.getItem('settings.ui.HideAutoCreatedPlaylist');
+        const HideAutoCreatedPlaylist = rawSetting ? JSON.parse(rawSetting) : false;
 
+
+        const playlists =
+            (playlistsRes.data?.['subsonic-response']?.playlists?.playlist as Playlist[])
+                ?.filter(e => !HideAutoCreatedPlaylist || e?.owner !== 'root') ?? [];
+
+        if (!playlists) return;
+        
         setCache(c => ({ ...c, allPlaylists: playlists }));
+
+
         return playlists;
-    }, [api, server.url]);
+    }, [api, server.url, HideAutoCreatedPlaylist]);
 
     const refreshPlaylist = useCallback(async (id: string) => {
         if (!api) return;
@@ -123,6 +136,8 @@ export default function MemoryCacheProvider({ children }: { children?: React.Rea
         setCache(c => ({ ...c, allSongs: songs }));
         return songs;
     }, [api, server.url]);
+
+
 
     // Prefetch the data
     useEffect(() => {
