@@ -42,6 +42,7 @@ declare module 'react-native-actions-sheet' {
         'newPlaylist': SheetDefinition<{
             payload: {
                 editId?: string;
+                initialName?: string;
             },
             returnValue: {
                 created: boolean;

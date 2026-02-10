@@ -83,14 +83,23 @@ function PlaylistSheet({ sheetId, payload }: SheetProps<'playlist'>) {
                     });
                 }}
             />}
-            {payload?.context == 'playlist' && <SheetOption
+            <SheetOption
                 icon={IconPencil}
-                label='Edit'
-                onPress={() => {
+                label='Rename'
+                onPress={async () => {
                     SheetManager.hide(sheetId);
+                    const result = await SheetManager.show('newPlaylist', {
+                        payload: {
+                            editId: payload?.id,
+                            initialName: data?.name ?? '',
+                        }
+                    });
+                    if (result?.created) {
+                        await memoryCache.refreshPlaylists();
+                        if (payload?.id) await memoryCache.refreshPlaylist(payload.id);
+                    }
                 }}
-            />}
-            {/* TODO */}
+            />
             {/* <SheetOption
                 icon={IconArrowsSort}
                 label='Sort By'

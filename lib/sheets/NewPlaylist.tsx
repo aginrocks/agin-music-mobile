@@ -14,7 +14,7 @@ function NewPlaylsitSheet({ sheetId, payload }: SheetProps<'newPlaylist'>) {
     const cache = useMemoryCache();
     const api = useApi();
 
-    const [name, setName] = useState<string>('');
+    const [name, setName] = useState<string>(payload?.initialName ?? '');
     const [loading, setLoading] = useState<boolean>(false);
 
     const styles = useMemo(() => StyleSheet.create({
@@ -37,7 +37,7 @@ function NewPlaylsitSheet({ sheetId, payload }: SheetProps<'newPlaylist'>) {
         setLoading(true);
 
         try {
-            const params = payload?.editId ? { playlistId: payload.editId } : { name };
+            const params = payload?.editId ? { playlistId: payload.editId, name } : { name };
 
             const res = await api.get('/createPlaylist', { params });
             const playlistId = res.data?.['subsonic-response']?.playlist?.id as string;
@@ -68,7 +68,7 @@ function NewPlaylsitSheet({ sheetId, payload }: SheetProps<'newPlaylist'>) {
                 </View>
                 <Input placeholder='Choose a name...' value={name} onChangeText={setName} autoFocus />
                 <View style={styles.button}>
-                    <Button variant='primary' onPress={save} disabled={name.length == 0 || loading}>Create</Button>
+                    <Button variant='primary' onPress={save} disabled={name.length == 0 || loading}>{isEdit ? 'Save' : 'Create'}</Button>
                 </View>
                 <Button variant='subtle' onPress={() => SheetManager.hide(sheetId, { payload: { created: false } })}>Cancel</Button>
             </View>
