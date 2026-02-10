@@ -1,16 +1,41 @@
 import { Tabs, TabList, TabTrigger, TabSlot } from 'expo-router/ui';
-import React, { } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useColorScheme } from '@/lib/hooks/useColorScheme';
 import { TabBar } from '@/lib/components/TabBar';
 import { TabButton } from '@/lib/components/TabBar/TabButton';
 import { IconCircleArrowDown, IconHome, IconLayoutGrid, IconSearch } from '@tabler/icons-react-native';
 import { useColors, useServer } from '@lib/hooks';
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const tabRoutes: Record<string, string> = {
+  home: '/',
+  library: '/library',
+  downloads: '/downloads',
+  search: '/search',
+};
 
 export default function TabLayout() {
   const colors = useColors();
   const { server, isLoading } = useServer();
+  const hasNavigated = useRef(false);
+
+  useEffect(() => {
+    if (isLoading || hasNavigated.current) return;
+    if (server.url === '' || server.auth.username === '') return;
+
+    (async () => {
+      const defaultTab = await AsyncStorage.getItem('settings.app.defaultTab');
+      const parsed = defaultTab ? JSON.parse(defaultTab) : null;
+      if (parsed && parsed !== 'home' && tabRoutes[parsed]) {
+        hasNavigated.current = true;
+        router.replace(tabRoutes[parsed] as any);
+      } else {
+        hasNavigated.current = true;
+      }
+    })();
+  }, [isLoading, server.url, server.auth.username]);
 
   if (isLoading) {
     return <View style={{ flex: 1, backgroundColor: colors.background }}></View>

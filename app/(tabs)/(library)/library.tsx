@@ -45,9 +45,18 @@ export default function Library() {
 
     useEffect(() => {
         (async () => {
-            const layout = await AsyncStorage.getItem('mediaLibrary.layout');
-            if (layout) setLayout(layout as MediaLibraryLayout);
+            const [storedLayout, defaultLibraryTab] = await Promise.all([
+                AsyncStorage.getItem('mediaLibrary.layout'),
+                AsyncStorage.getItem('settings.app.defaultLibraryTab'),
+            ]);
+            if (storedLayout) setLayout(storedLayout as MediaLibraryLayout);
             else setLayout('grid');
+            if (defaultLibraryTab) {
+                const parsed = JSON.parse(defaultLibraryTab);
+                if (['playlists', 'artists', 'albums', 'songs'].includes(parsed)) {
+                    setTab(parsed);
+                }
+            }
         })();
     }, []);
 

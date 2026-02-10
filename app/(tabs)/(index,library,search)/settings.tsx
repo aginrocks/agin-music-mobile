@@ -3,7 +3,7 @@ import Header from '@lib/components/Header';
 import Setting, { SettingSelectOption } from '@lib/components/Setting';
 import SettingsSection from '@lib/components/SettingsSection';
 import { useCache, useMemoryCache } from '@lib/hooks';
-import { IconCircleCheck, IconFileMusic, IconVolume } from '@tabler/icons-react-native';
+import { IconCircleCheck, IconDoor, IconFileMusic, IconLayoutGrid, IconVolume } from '@tabler/icons-react-native';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SheetManager } from 'react-native-actions-sheet';
@@ -28,7 +28,21 @@ const formatOptions: SettingSelectOption[] = [
     { label: 'OGG Vorbis', description: 'Open source format', value: 'ogg', shortLabel: 'OGG' },
 ];
 
-export type SettingId = 'streaming.maxBitRate' | 'streaming.format' | 'storage.clearCache' | 'developer.copyId' | 'ui.toastPosition' | 'ui.autoFocusSearchBar';
+const defaultTabOptions: SettingSelectOption[] = [
+    { label: 'Home', description: 'Main home screen', value: 'home', shortLabel: 'Home' },
+    { label: 'Library', description: 'Your music library', value: 'library', shortLabel: 'Library' },
+    { label: 'Downloads', description: 'Downloaded music', value: 'downloads', shortLabel: 'Downloads' },
+    { label: 'Search', description: 'Search for music', value: 'search', shortLabel: 'Search' },
+];
+
+const defaultLibraryTabOptions: SettingSelectOption[] = [
+    { label: 'Playlists', description: 'Your playlists', value: 'playlists', shortLabel: 'Playlists' },
+    { label: 'Artists', description: 'Browse by artist', value: 'artists', shortLabel: 'Artists' },
+    { label: 'Albums', description: 'Browse by album', value: 'albums', shortLabel: 'Albums' },
+    { label: 'Songs', description: 'All songs', value: 'songs', shortLabel: 'Songs' },
+];
+
+export type SettingId = 'streaming.maxBitRate' | 'streaming.format' | 'storage.clearCache' | 'developer.copyId' | 'ui.toastPosition' | 'ui.autoFocusSearchBar' | 'app.defaultTab' | 'app.defaultLibraryTab';
 
 export default function Settings() {
     const cache = useCache();
@@ -48,6 +62,25 @@ export default function Settings() {
             <Header title="Settings" withBackIcon withAvatar={false} titleSize={20} />
             <ScrollView>
                 <View style={styles.settings}>
+                    <SettingsSection label='Launch' />
+                    <Setting
+                        id='app.defaultTab'
+                        type='select'
+                        label='Default Tab'
+                        description='Which tab to open when launching the app'
+                        icon={IconDoor}
+                        defaultValue='home'
+                        options={defaultTabOptions}
+                    />
+                    <Setting
+                        id='app.defaultLibraryTab'
+                        type='select'
+                        label='Default Library Section'
+                        description='Which library section to show by default'
+                        icon={IconLayoutGrid}
+                        defaultValue='playlists'
+                        options={defaultLibraryTabOptions}
+                    />
                     <SettingsSection label='Streaming Quality' />
                     <Setting
                         id='streaming.maxBitRate'
