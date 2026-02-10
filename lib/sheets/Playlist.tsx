@@ -6,7 +6,7 @@ import { useApiHelpers, useCoverBuilder, useMemoryCache, usePins, useQueue, useS
 import { useEffect } from 'react';
 import SheetTrackHeader from '@lib/components/sheet/SheetTrackHeader';
 import SheetOption from '@lib/components/sheet/SheetOption';
-import { IconArrowsShuffle, IconArrowsSort, IconCirclePlus, IconCopy, IconDownload, IconPencil, IconPin, IconPinnedOff, IconPlayerPlay, IconTrash } from '@tabler/icons-react-native';
+import { IconArrowsShuffle, IconCirclePlus, IconCopy, IconDownload, IconPencil, IconPin, IconPinnedOff, IconPlayerPlay, IconTrash } from '@tabler/icons-react-native';
 import { formatDistanceToNow } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -85,29 +85,12 @@ function PlaylistSheet({ sheetId, payload }: SheetProps<'playlist'>) {
             />}
             <SheetOption
                 icon={IconPencil}
-                label='Rename'
-                onPress={async () => {
-                    SheetManager.hide(sheetId);
-                    const result = await SheetManager.show('newPlaylist', {
-                        payload: {
-                            editId: payload?.id,
-                            initialName: data?.name ?? '',
-                        }
-                    });
-                    if (result?.created) {
-                        await memoryCache.refreshPlaylists();
-                        if (payload?.id) await memoryCache.refreshPlaylist(payload.id);
-                    }
-                }}
-            />
-            {/* <SheetOption
-                icon={IconArrowsSort}
-                label='Sort By'
-                description='Playlist Order'
+                label='Edit Playlist'
                 onPress={() => {
                     SheetManager.hide(sheetId);
+                    router.push({ pathname: '/playlists/[id]/edit', params: { id: payload?.id ?? '' } });
                 }}
-            /> */}
+            />
             {payload?.context != 'playlist' && <SheetOption
                 icon={IconDownload}
                 label='Download'

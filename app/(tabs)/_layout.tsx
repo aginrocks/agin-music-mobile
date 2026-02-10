@@ -24,15 +24,18 @@ export default function TabLayout() {
   useEffect(() => {
     if (isLoading || hasNavigated.current) return;
     if (server.url === '' || server.auth.username === '') return;
+    hasNavigated.current = true;
 
     (async () => {
       const defaultTab = await AsyncStorage.getItem('settings.app.defaultTab');
       const parsed = defaultTab ? JSON.parse(defaultTab) : null;
       if (parsed && parsed !== 'home' && tabRoutes[parsed]) {
-        hasNavigated.current = true;
-        router.replace(tabRoutes[parsed] as any);
-      } else {
-        hasNavigated.current = true;
+        // Delay to ensure the tab navigator is fully mounted
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            router.navigate(tabRoutes[parsed] as any);
+          }, 0);
+        });
       }
     })();
   }, [isLoading, server.url, server.auth.username]);
