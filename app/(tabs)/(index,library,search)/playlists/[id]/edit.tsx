@@ -4,7 +4,7 @@ import Title from '@/lib/components/Title';
 import Cover from '@/lib/components/Cover';
 import Button from '@/lib/components/Button';
 import { Input } from '@/lib/components/Input';
-import { useApi, useColors, useCoverBuilder, useMemoryCache } from '@lib/hooks';
+import { useApi, useColors, useCoverBuilder, useMemoryCache, useTabsHeight } from '@lib/hooks';
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Keyboard, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
@@ -16,6 +16,8 @@ import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flat
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+type SongEntry = Child & { _key: string };
+
 export default function EditPlaylist() {
     const { id } = useLocalSearchParams();
     const cache = useMemoryCache();
@@ -23,11 +25,16 @@ export default function EditPlaylist() {
     const colors = useColors();
     const api = useApi();
     const insets = useSafeAreaInsets();
+    const [tabsHeight] = useTabsHeight();
 
     const data = useMemo(() => cache.cache.playlists[id as string], [cache.cache.playlists, id]);
+    const keyCounter = useRef(0);
+
+    const assignKeys = useCallback((entries: Child[]): SongEntry[] =>
+        entries.map(e => ({ ...e, _key: `k${keyCounter.current++}` })), []);
 
     const [name, setName] = useState(data?.name ?? '');
-    const [songs, setSongs] = useState<Child[]>(data?.entry ?? []);
+    const [songs, setSongs] = useState<SongEntry[]>(() => assignKeys(data?.entry ?? []));
     const [saving, setSaving] = useState(false);
     const [searching, setSearching] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -42,7 +49,7 @@ export default function EditPlaylist() {
             const fresh = cache.cache.playlists[id as string];
             if (fresh) {
                 setName(fresh.name);
-                setSongs(fresh.entry ?? []);
+                setSongs(assignKeys(fresh.entry ?? []));
                 initialized.current = true;
             }
         });
@@ -75,7 +82,7 @@ export default function EditPlaylist() {
 
     const addSongFromSearch = useCallback((song: Child) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setSongs(prev => [...prev, song]);
+        setSongs(prev => [...prev, { ...song, _key: `k${keyCounter.current++}` }]);
         showToast({
             title: 'Added',
             subtitle: song.title,
@@ -197,7 +204,7 @@ export default function EditPlaylist() {
         },
         footer: {
             paddingTop: 10,
-            paddingBottom: insets.bottom + 10,
+            paddingBottom: tabsHeight + 10,
             paddingHorizontal: 20,
             gap: 8,
         },
@@ -224,7 +231,7 @@ export default function EditPlaylist() {
             alignItems: 'center',
             paddingTop: 40,
         },
-    }), [colors]);
+    }), [colors, tabsHeight]);
 
     // Search results item
     const renderSearchItem = useCallback(({ item }: { item: Child }) => {
@@ -256,7 +263,7 @@ export default function EditPlaylist() {
     }, [cover, colors, styles, songs, addSongFromSearch]);
 
     // Playlist song item with drag handle and remove
-    const renderItem = useCallback(({ item, drag, isActive, getIndex }: RenderItemParams<Child>) => {
+    const renderItem = useCallback(({ item, drag, isActive, getIndex }: RenderItemParams<SongEntry>) => {
         const index = getIndex() ?? 0;
         return (
             <View style={[styles.item, isActive && styles.itemActive]}>
@@ -319,10 +326,11 @@ export default function EditPlaylist() {
                         <GestureHandlerRootView style={{ flex: 1 }}>
                             <DraggableFlatList
                                 data={songs}
-                                keyExtractor={(item, index) => `${item.id}-${index}`}
+                                keyExtractor={(item) => item._key}
                                 renderItem={renderItem}
                                 onDragBegin={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid)}
                                 onDragEnd={({ data }) => setSongs(data)}
+                                animationConfig={{ duration: 150 }}
                                 ListFooterComponent={<View style={{ height: 10 }} />}
                             />
                         </GestureHandlerRootView>
