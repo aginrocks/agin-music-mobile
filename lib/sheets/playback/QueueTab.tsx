@@ -8,8 +8,6 @@ import ActionIcon from '@/lib/components/ActionIcon';
 import { IconRepeat, IconRepeatOff, IconRepeatOnce, IconTrash } from '@tabler/icons-react-native';
 import { IdContext } from '.';
 import { SheetManager } from 'react-native-actions-sheet';
-import { RepeatMode } from 'react-native-track-player';
-
 export default function QueueTab() {
     const colors = useColors();
     const queue = useQueue();
@@ -46,7 +44,7 @@ export default function QueueTab() {
                         <Title size={12} fontFamily="Poppins-Regular" color={colors.text[1]}>{queue.source.sourceName ? `Playing from ${queue.source.sourceName}` : 'Manually Added'}</Title>
                     </View>
                     <View style={styles.actions}>
-                        <ActionIcon icon={queue.repeatMode === RepeatMode.Off ? IconRepeatOff : queue.repeatMode === RepeatMode.Queue ? IconRepeat : IconRepeatOnce} variant={queue.repeatMode !== RepeatMode.Off ? 'secondaryFilled' : 'secondary'} size={16} onPress={queue.cycleRepeatMode} />
+                        <ActionIcon icon={queue.repeatMode === 'off' ? IconRepeatOff : queue.repeatMode === 'Playlist' ? IconRepeat : IconRepeatOnce} variant={queue.repeatMode !== 'off' ? 'secondaryFilled' : 'secondary'} size={16} onPress={queue.cycleRepeatMode} />
                         <ActionIcon icon={IconTrash} variant='secondary' size={16} onPress={async () => await queue.clearConfirm({ wait: true, onConfirm: () => SheetManager.hide(sheetId) })} />
                     </View>
                 </View>

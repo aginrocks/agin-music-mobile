@@ -13,7 +13,7 @@ import Animated, { Easing, FadeInDown, FadeOutDown } from 'react-native-reanimat
 import React from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import TrackPlayer, { State, usePlaybackState } from 'react-native-track-player';
+import { TrackPlayer, useOnPlaybackStateChange } from 'react-native-nitro-player';
 
 function RenderItem(item: Child) {
     const colors = useColors();
@@ -97,7 +97,7 @@ export default function Miniplayer() {
     const queue = useQueue();
     const { nowPlaying } = queue;
 
-    const state = usePlaybackState();
+    const { state } = useOnPlaybackStateChange();
 
     const [carouselWidth, setCarouselWidth] = useState(0);
 
@@ -166,7 +166,7 @@ export default function Miniplayer() {
                     </View>
                     {!isEmpty && (
                         <View style={styles.actions}>
-                            <ActionIcon icon={(state == State.Paused || state == State.None) ? IconPlayerPlayFilled : IconPlayerPauseFilled} size={24} stroke="transparent" isFilled onPress={() => (state == State.Paused || state == State.None) ? TrackPlayer.play() : TrackPlayer.pause()} />
+                            <ActionIcon icon={(state === 'paused' || state === 'stopped') ? IconPlayerPlayFilled : IconPlayerPauseFilled} size={24} stroke="transparent" isFilled onPress={() => (state === 'paused' || state === 'stopped') ? TrackPlayer.play() : TrackPlayer.pause()} />
                             <ActionIcon icon={IconPlayerTrackNextFilled} size={18} isFilled onPress={() => queue.skipForward()} disabled={!queue.canGoForward} />
                         </View>
                     )}

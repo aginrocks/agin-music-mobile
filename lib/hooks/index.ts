@@ -8,7 +8,7 @@ export * from './useCoverBuilder';
 export * from './useColors';
 export * from './useCache';
 export * from './useMemoryCache';
-export * from './useSetupTrackPlayer';
+export * from './useSetupPlayer';
 export * from './usePins';
 export * from './useApiHelpers';
 export * from './useTabsHeight';

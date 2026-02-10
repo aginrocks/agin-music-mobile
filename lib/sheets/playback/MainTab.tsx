@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import TrackPlayer, { State, usePlaybackState, useProgress } from 'react-native-track-player';
+import { TrackPlayer, useOnPlaybackStateChange, useOnPlaybackProgressChange } from 'react-native-nitro-player';
 import { router } from 'expo-router';
 import { SheetManager } from 'react-native-actions-sheet';
 
@@ -32,8 +32,15 @@ export default function MainTab() {
 
     const { width, height } = useWindowDimensions();
 
-    const { position, duration } = useProgress();
-    const state = usePlaybackState();
+    const [position, setPosition] = useState(0);
+    const [duration, setDuration] = useState(0);
+    useOnPlaybackProgressChange(({ position: pos, totalDuration }) => {
+        if (!seeking) {
+            setPosition(pos);
+            setDuration(totalDuration);
+        }
+    });
+    const { state } = useOnPlaybackStateChange();
 
     useEffect(() => {
         if (seeking) return;
@@ -85,7 +92,7 @@ export default function MainTab() {
         }
     }), [insets.bottom, height]);
 
-    const buffering = state === State.Connecting;
+    const buffering = state === 'buffering';
 
     return (
         <View style={styles.container}>
@@ -117,7 +124,7 @@ export default function MainTab() {
                         setSeekingValue(value);
                     }}
                     onSlidingComplete={(value) => {
-                        TrackPlayer.seekTo(value);
+                        TrackPlayer.seek(value);
                         progress.value = value;
                     }}
                 />
@@ -127,7 +134,7 @@ export default function MainTab() {
                 </View>
                 <View style={styles.buttons}>
                     <ActionIcon icon={IconPlayerSkipBackFilled} isFilled size={30} onPress={() => queue.skipBackward()} disabled={!queue.canGoBackward} />
-                    <ActionIcon icon={(state == State.Paused || state == State.None) ? IconPlayerPlayFilled : IconPlayerPauseFilled} isFilled size={55} stroke="transparent" onPress={() => (state == State.Paused || state == State.None) ? TrackPlayer.play() : TrackPlayer.pause()} />
+                    <ActionIcon icon={(state === 'paused' || state === 'stopped') ? IconPlayerPlayFilled : IconPlayerPauseFilled} isFilled size={55} stroke="transparent" onPress={() => (state === 'paused' || state === 'stopped') ? TrackPlayer.play() : TrackPlayer.pause()} />
                     <ActionIcon icon={IconPlayerSkipForwardFilled} isFilled size={30} onPress={() => queue.skipForward()} disabled={!queue.canGoForward} />
                 </View>
             </View>

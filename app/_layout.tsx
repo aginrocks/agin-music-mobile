@@ -15,9 +15,7 @@ import initDatabase from '@/lib/initDatabase';
 import QueueProvider from '@/lib/providers/QueueProvider';
 import MemoryCacheProvider from '@/lib/providers/MemoryCacheProvider';
 import { configureReanimatedLogger, ReanimatedLogLevel, } from 'react-native-reanimated';
-import { useSetupTrackPlayer } from '@lib/hooks';
-import TrackPlayer from 'react-native-track-player';
-import { PlaybackService } from '@lib/service';
+import { useSetupPlayer } from '@lib/hooks';
 import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 import TabsHeightProvider from '@lib/providers/TabsHeightProvider';
 import Toast from 'react-native-toast-message';
@@ -41,8 +39,6 @@ configureReanimatedLogger({
   level: ReanimatedLogLevel.warn,
   strict: false, // Reanimated runs in strict mode by default
 });
-
-TrackPlayer.registerPlaybackService(() => PlaybackService);
 
 registerWidgetTaskHandler(widgetTaskHandler);
 
@@ -68,7 +64,7 @@ export default function RootLayout() {
     'Poppins-ThinItalic': require('../assets/fonts/Poppins/Poppins-ThinItalic.ttf'),
   });
 
-  useSetupTrackPlayer({});
+  useSetupPlayer({});
 
   useEffect(() => {
     if (loaded) {
