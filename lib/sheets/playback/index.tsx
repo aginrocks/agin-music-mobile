@@ -17,6 +17,8 @@ import Title from '@/lib/components/Title';
 import QueueTab from './QueueTab';
 import LyricsTab from './LyricsTab';
 import { ColorSchemeOverride } from '@lib/providers/ColorSchemeOverride';
+import Toast from 'react-native-toast-message';
+import { toastConfig } from '@lib/toastConfig';
 
 type GestureEnabledContextType = [
     boolean,
@@ -137,6 +139,7 @@ function PlaybackSheet({ sheetId, payload }: SheetProps<'playback'>) {
                         </TabContext.Provider>
                     </IdContext.Provider>
                 </GestureEnabledContext.Provider>
+                <Toast config={toastConfig} position='top' topOffset={insets.top + 10} />
             </StyledActionSheet>
         </ColorSchemeOverride.Provider>
     );
