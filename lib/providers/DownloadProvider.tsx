@@ -73,11 +73,13 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
 
     const actions = useDownloadActions();
     const downloaded = useDownloadedTracks();
-    const progress = useDownloadProgress({ activeOnly: true });
+    const progress = useDownloadProgress();
     const storage = useDownloadStorage();
 
     const [downloadingMeta, setDownloadingMeta] = useState<Map<string, Child>>(new Map());
     const initializedRef = useRef(false);
+    const metaFetchInFlightRef = useRef<Set<string>>(new Set());
+    const metaFetchUnavailableRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (initializedRef.current) return;
@@ -91,6 +93,11 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
             backgroundDownloadsEnabled: true,
         });
         DownloadManager.setPlaybackSourcePreference('auto');
+        try {
+            DownloadManager.syncDownloads();
+        } catch {
+            return;
+        }
 
         DownloadManager.onDownloadComplete((track) => {
             setDownloadingMeta(prev => {
@@ -100,7 +107,7 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
             });
             showToast({
                 title: 'Download Complete',
-                subtitle: track.originalTrack.title,
+                subtitle: track.originalTrack.title || track.trackId,
                 icon: IconCircleCheck,
             });
             downloaded.refresh();
@@ -108,12 +115,16 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
         });
 
         DownloadManager.onDownloadStateChange((_downloadId, trackId, state, error) => {
-            if (state === 'failed' || state === 'cancelled') {
+            if (state === 'failed' || state === 'cancelled' || state === 'completed') {
                 setDownloadingMeta(prev => {
                     const next = new Map(prev);
                     next.delete(trackId);
                     return next;
                 });
+            }
+            if (state === 'completed') {
+                downloaded.refresh();
+                storage.refresh();
             }
             if (state === 'failed' && error) {
                 showToast({
@@ -172,19 +183,19 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
 
     const downloadPlaylist = useCallback(async (playlistId: string, tracks: Child[]) => {
         const trackItems = tracks.map(convertToTrackItem);
-        tracks.forEach(t => {
-            setDownloadingMeta(prev => new Map(prev).set(t.id, t));
+        setDownloadingMeta(prev => {
+            const next = new Map(prev);
+            tracks.forEach(track => next.set(track.id, track));
+            return next;
         });
         try {
             await actions.downloadPlaylist(playlistId, trackItems);
             showToast({ title: 'Downloading', subtitle: `${tracks.length} tracks`, icon: IconDownload });
         } catch (e) {
-            tracks.forEach(t => {
-                setDownloadingMeta(prev => {
-                    const next = new Map(prev);
-                    next.delete(t.id);
-                    return next;
-                });
+            setDownloadingMeta(prev => {
+                const next = new Map(prev);
+                tracks.forEach(track => next.delete(track.id));
+                return next;
             });
             showToast({ title: 'Download Error', subtitle: String(e), haptics: 'error', icon: IconCircleX });
         }
@@ -206,6 +217,82 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
         return downloadingMeta.get(trackId);
     }, [downloadingMeta]);
 
+    useEffect(() => {
+        const missingTrackIds = progress.progressList
+            .map(p => p.trackId)
+            .filter(trackId =>
+                !downloadingMeta.has(trackId) &&
+                !metaFetchUnavailableRef.current.has(trackId)
+            );
+
+        if (missingTrackIds.length === 0) {
+            return;
+        }
+
+        missingTrackIds.forEach(trackId => {
+            if (metaFetchInFlightRef.current.has(trackId)) {
+                return;
+            }
+            metaFetchInFlightRef.current.add(trackId);
+
+            cache.fetchChild(trackId)
+                .then(child => {
+                    if (!child) {
+                        metaFetchUnavailableRef.current.add(trackId);
+                        return;
+                    }
+                    setDownloadingMeta(prev => {
+                        if (prev.has(trackId)) {
+                            return prev;
+                        }
+                        const next = new Map(prev);
+                        next.set(trackId, child);
+                        return next;
+                    });
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                    metaFetchInFlightRef.current.delete(trackId);
+                });
+        });
+    }, [progress.progressList, downloadingMeta, cache.fetchChild]);
+
+    const pauseDownload = useCallback(async (downloadId: string) => {
+        try {
+            await actions.pauseDownload(downloadId);
+        } catch (e) {
+            showToast({ title: 'Pause Failed', subtitle: String(e), haptics: 'error', icon: IconCircleX });
+            throw e;
+        }
+    }, [actions.pauseDownload]);
+
+    const resumeDownload = useCallback(async (downloadId: string) => {
+        try {
+            await actions.resumeDownload(downloadId);
+        } catch (e) {
+            showToast({ title: 'Resume Failed', subtitle: String(e), haptics: 'error', icon: IconCircleX });
+            throw e;
+        }
+    }, [actions.resumeDownload]);
+
+    const cancelDownload = useCallback(async (downloadId: string) => {
+        try {
+            await actions.cancelDownload(downloadId);
+        } catch (e) {
+            showToast({ title: 'Cancel Failed', subtitle: String(e), haptics: 'error', icon: IconCircleX });
+            throw e;
+        }
+    }, [actions.cancelDownload]);
+
+    const retryDownload = useCallback(async (downloadId: string) => {
+        try {
+            await actions.retryDownload(downloadId);
+        } catch (e) {
+            showToast({ title: 'Retry Failed', subtitle: String(e), haptics: 'error', icon: IconCircleX });
+            throw e;
+        }
+    }, [actions.retryDownload]);
+
     const filteredActiveDownloads = useMemo(() =>
         progress.progressList.filter(p =>
             p.state === 'pending' || p.state === 'downloading' || p.state === 'paused'
@@ -220,10 +307,10 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
             downloadPlaylist,
             deleteTrack,
             deleteAll,
-            cancelDownload: actions.cancelDownload,
-            pauseDownload: actions.pauseDownload,
-            resumeDownload: actions.resumeDownload,
-            retryDownload: actions.retryDownload,
+            cancelDownload,
+            pauseDownload,
+            resumeDownload,
+            retryDownload,
             isTrackDownloaded: downloaded.isTrackDownloaded,
             getTrackProgress: progress.getProgress,
             getDownloadingMeta,

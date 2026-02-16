@@ -37,7 +37,31 @@ function ActiveDownloadItem({ item, colors, downloads }: { item: ActiveDownloadR
         ? 'Waiting...'
         : isPaused
             ? `Paused \u2022 ${percentage}%`
-            : `${percentage}% \u2022 ${formatBytes(item.data.bytesDownloaded)} / ${formatBytes(item.data.totalBytes)}`;
+            : percentage >= 100
+                ? 'Finalizing...'
+                : `${percentage}% \u2022 ${formatBytes(item.data.bytesDownloaded)} / ${formatBytes(item.data.totalBytes)}`;
+
+    const handlePauseResume = useCallback(async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        try {
+            if (isPaused) {
+                await downloads.resumeDownload(item.data.downloadId);
+            } else {
+                await downloads.pauseDownload(item.data.downloadId);
+            }
+        } catch {
+            return;
+        }
+    }, [isPaused, downloads, item.data.downloadId]);
+
+    const handleCancel = useCallback(async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        try {
+            await downloads.cancelDownload(item.data.downloadId);
+        } catch {
+            return;
+        }
+    }, [downloads, item.data.downloadId]);
 
     return (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8, gap: 12 }}>
@@ -49,7 +73,7 @@ function ActiveDownloadItem({ item, colors, downloads }: { item: ActiveDownloadR
                 withShadow={false}
             />
             <View style={{ flex: 1 }}>
-                <Title size={14} numberOfLines={1}>{meta?.title ?? item.data.trackId}</Title>
+                <Title size={14} numberOfLines={1}>{meta?.title ?? 'Downloading...'}</Title>
                 <Title size={12} color={colors.text[1]} fontFamily="Poppins-Regular" numberOfLines={1}>{meta?.artist ?? 'Downloading...'}</Title>
                 <View style={{ height: 3, borderRadius: 2, backgroundColor: colors.border[0], marginTop: 4, overflow: 'hidden' }}>
                     <View style={{ height: '100%', width: `${percentage}%`, backgroundColor: isPaused ? colors.text[1] : colors.forcedTint, borderRadius: 2 }} />
@@ -62,23 +86,13 @@ function ActiveDownloadItem({ item, colors, downloads }: { item: ActiveDownloadR
                 icon={isPaused ? IconPlayerPlay : IconPlayerPause}
                 size={14}
                 variant="secondary"
-                onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    if (isPaused) {
-                        downloads.resumeDownload(item.data.downloadId);
-                    } else {
-                        downloads.pauseDownload(item.data.downloadId);
-                    }
-                }}
+                onPress={handlePauseResume}
             />
             <ActionIcon
                 icon={IconX}
                 size={14}
                 variant="secondary"
-                onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    downloads.cancelDownload(item.data.downloadId);
-                }}
+                onPress={handleCancel}
             />
         </View>
     );

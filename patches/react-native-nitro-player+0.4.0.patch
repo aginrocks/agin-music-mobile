@@ -1,0 +1,723 @@
+diff --git a/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadFileManager.kt b/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadFileManager.kt
+index b4a97bd..f25d5a6 100644
+--- a/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadFileManager.kt
++++ b/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadFileManager.kt
+@@ -73,6 +73,22 @@ class DownloadFileManager private constructor(
+         }
+     }
+ 
++    fun deleteTrackFiles(trackId: String) {
++        try {
++            val privateFile = File(privateDownloadsDir, "$trackId.mp3")
++            if (privateFile.exists()) {
++                privateFile.delete()
++            }
++
++            val publicFile = File(publicDownloadsDir, "$trackId.mp3")
++            if (publicFile.exists()) {
++                publicFile.delete()
++            }
++        } catch (e: Exception) {
++            e.printStackTrace()
++        }
++    }
++
+     fun getFileSize(path: String): Long =
+         try {
+             File(path).length()
+diff --git a/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadManagerCore.kt b/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadManagerCore.kt
+index 82c2dcc..0dfb1e6 100644
+--- a/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadManagerCore.kt
++++ b/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadManagerCore.kt
+@@ -48,6 +48,8 @@ class DownloadManagerCore private constructor(
+     private val activeTasks = ConcurrentHashMap<String, DownloadTaskMetadata>()
+     private val trackMetadata = ConcurrentHashMap<String, TrackItem>()
+     private val playlistAssociations = ConcurrentHashMap<String, String>()
++    private val cancelledDownloadIds = ConcurrentHashMap.newKeySet<String>()
++    private val pausedDownloadIds = ConcurrentHashMap.newKeySet<String>()
+ 
+     // Callbacks
+     private val progressCallbacks = CopyOnWriteArrayList<(DownloadProgress) -> Unit>()
+@@ -74,6 +76,8 @@ class DownloadManagerCore private constructor(
+         playlistId: String?,
+     ): String {
+         val downloadId = UUID.randomUUID().toString()
++        cancelledDownloadIds.remove(downloadId)
++        pausedDownloadIds.remove(downloadId)
+ 
+         // Store track metadata
+         trackMetadata[track.id] = track
+@@ -104,14 +108,7 @@ class DownloadManagerCore private constructor(
+                 ).setRequiresStorageNotLow(true)
+                 .build()
+ 
+-        val inputData =
+-            workDataOf(
+-                DownloadWorker.KEY_DOWNLOAD_ID to downloadId,
+-                DownloadWorker.KEY_TRACK_ID to track.id,
+-                DownloadWorker.KEY_URL to track.url,
+-                DownloadWorker.KEY_PLAYLIST_ID to (playlistId ?: ""),
+-                DownloadWorker.KEY_STORAGE_LOCATION to (config.storageLocation?.name ?: StorageLocation.PRIVATE.name),
+-            )
++        val inputData = createWorkerInputData(downloadId, track, playlistId)
+ 
+         val downloadRequest =
+             OneTimeWorkRequestBuilder<DownloadWorker>()
+@@ -121,7 +118,11 @@ class DownloadManagerCore private constructor(
+                 .addTag("track_${track.id}")
+                 .build()
+ 
+-        workManager.enqueue(downloadRequest)
++        workManager.enqueueUniqueWork(
++            "download_$downloadId",
++            ExistingWorkPolicy.REPLACE,
++            downloadRequest,
++        )
+ 
+         // Update state
+         activeTasks[downloadId]?.state = DownloadState.PENDING
+@@ -141,6 +142,8 @@ class DownloadManagerCore private constructor(
+ 
+     // Download Control
+     fun pauseDownload(downloadId: String) {
++        pausedDownloadIds.add(downloadId)
++        cancelledDownloadIds.remove(downloadId)
+         workManager.cancelAllWorkByTag("download_$downloadId")
+         activeTasks[downloadId]?.let { metadata ->
+             metadata.state = DownloadState.PAUSED
+@@ -149,6 +152,10 @@ class DownloadManagerCore private constructor(
+     }
+ 
+     fun resumeDownload(downloadId: String) {
++        if (cancelledDownloadIds.contains(downloadId)) {
++            return
++        }
++        pausedDownloadIds.remove(downloadId)
+         activeTasks[downloadId]?.let { metadata ->
+             val track = trackMetadata[metadata.trackId] ?: return
+             val playlistId = playlistAssociations[downloadId]
+@@ -162,14 +169,7 @@ class DownloadManagerCore private constructor(
+                     ).setRequiresStorageNotLow(true)
+                     .build()
+ 
+-            val inputData =
+-                workDataOf(
+-                    DownloadWorker.KEY_DOWNLOAD_ID to downloadId,
+-                    DownloadWorker.KEY_TRACK_ID to track.id,
+-                    DownloadWorker.KEY_URL to track.url,
+-                    DownloadWorker.KEY_PLAYLIST_ID to (playlistId ?: ""),
+-                    DownloadWorker.KEY_STORAGE_LOCATION to (config.storageLocation?.name ?: StorageLocation.PRIVATE.name),
+-                )
++            val inputData = createWorkerInputData(downloadId, track, playlistId)
+ 
+             val downloadRequest =
+                 OneTimeWorkRequestBuilder<DownloadWorker>()
+@@ -179,7 +179,11 @@ class DownloadManagerCore private constructor(
+                     .addTag("track_${track.id}")
+                     .build()
+ 
+-            workManager.enqueue(downloadRequest)
++            workManager.enqueueUniqueWork(
++                "download_$downloadId",
++                ExistingWorkPolicy.REPLACE,
++                downloadRequest,
++            )
+ 
+             metadata.state = DownloadState.DOWNLOADING
+             notifyStateChange(downloadId, metadata.trackId, DownloadState.DOWNLOADING, null)
+@@ -187,16 +191,27 @@ class DownloadManagerCore private constructor(
+     }
+ 
+     fun cancelDownload(downloadId: String) {
++        pausedDownloadIds.remove(downloadId)
++        cancelledDownloadIds.add(downloadId)
+         workManager.cancelAllWorkByTag("download_$downloadId")
+         activeTasks[downloadId]?.let { metadata ->
+             metadata.state = DownloadState.CANCELLED
+             notifyStateChange(downloadId, metadata.trackId, DownloadState.CANCELLED, null)
++            fileManager.deleteTrackFiles(metadata.trackId)
++            trackMetadata.remove(metadata.trackId)
++            playlistAssociations.remove(downloadId)
+             activeTasks.remove(downloadId)
+         }
+     }
+ 
+     fun retryDownload(downloadId: String) {
++        if (isDownloadStoppedByUser(downloadId)) {
++            return
++        }
+         activeTasks[downloadId]?.let { metadata ->
++            if (metadata.state == DownloadState.PAUSED || metadata.state == DownloadState.CANCELLED) {
++                return
++            }
+             metadata.retryCount++
+             metadata.error = null
+             resumeDownload(downloadId)
+@@ -327,12 +342,25 @@ class DownloadManagerCore private constructor(
+         bytesDownloaded: Long,
+         totalBytes: Long,
+     ) {
+-        activeTasks[downloadId]?.let { metadata ->
+-            metadata.bytesDownloaded = bytesDownloaded.toDouble()
+-            metadata.totalBytes = totalBytes.toDouble()
+-            metadata.state = DownloadState.DOWNLOADING
++        if (isDownloadStoppedByUser(downloadId)) {
++            return
+         }
+ 
++        val metadata =
++            activeTasks.getOrPut(downloadId) {
++                DownloadTaskMetadata(
++                    downloadId = downloadId,
++                    trackId = trackId,
++                    playlistId = playlistAssociations[downloadId],
++                    state = DownloadState.DOWNLOADING,
++                    createdAt = System.currentTimeMillis().toDouble(),
++                    startedAt = System.currentTimeMillis().toDouble(),
++                )
++            }
++        metadata.bytesDownloaded = bytesDownloaded.toDouble()
++        metadata.totalBytes = totalBytes.toDouble()
++        metadata.state = DownloadState.DOWNLOADING
++
+         val progress =
+             DownloadProgress(
+                 trackId = trackId,
+@@ -352,9 +380,30 @@ class DownloadManagerCore private constructor(
+         downloadId: String,
+         trackId: String,
+         localPath: String,
++        fallbackTrack: TrackItem? = null,
++        fallbackPlaylistId: String? = null,
+     ) {
+-        val track = trackMetadata[trackId] ?: return
+-        val playlistId = playlistAssociations[downloadId]
++        if (cancelledDownloadIds.remove(downloadId)) {
++            try { java.io.File(localPath).delete() } catch (_: Exception) {}
++            activeTasks.remove(downloadId)
++            playlistAssociations.remove(downloadId)
++            trackMetadata.remove(trackId)
++            return
++        }
++
++        val track = trackMetadata[trackId] ?: fallbackTrack
++        if (track == null) {
++            try { java.io.File(localPath).delete() } catch (_: Exception) {}
++            activeTasks.remove(downloadId)
++            playlistAssociations.remove(downloadId)
++            return
++        }
++        trackMetadata[trackId] = track
++
++        val playlistId = playlistAssociations[downloadId] ?: fallbackPlaylistId
++        if (!playlistId.isNullOrEmpty()) {
++            playlistAssociations[downloadId] = playlistId
++        }
+         val storageLocation = config.storageLocation ?: StorageLocation.PRIVATE
+         val fileSize = fileManager.getFileSize(localPath)
+ 
+@@ -376,6 +425,8 @@ class DownloadManagerCore private constructor(
+             metadata.completedAt = System.currentTimeMillis().toDouble()
+         }
+         activeTasks.remove(downloadId)
++        playlistAssociations.remove(downloadId)
++        trackMetadata.remove(trackId)
+ 
+         notifyStateChange(downloadId, trackId, DownloadState.COMPLETED, null)
+ 
+@@ -389,7 +440,14 @@ class DownloadManagerCore private constructor(
+         trackId: String,
+         error: DownloadError,
+     ) {
++        if (isDownloadStoppedByUser(downloadId)) {
++            return
++        }
++
+         activeTasks[downloadId]?.let { metadata ->
++            if (metadata.state == DownloadState.PAUSED || metadata.state == DownloadState.CANCELLED) {
++                return
++            }
+             metadata.state = DownloadState.FAILED
+             metadata.error = error
+ 
+@@ -404,6 +462,76 @@ class DownloadManagerCore private constructor(
+         }
+     }
+ 
++    internal fun isDownloadStoppedByUser(downloadId: String): Boolean =
++        cancelledDownloadIds.contains(downloadId) || pausedDownloadIds.contains(downloadId)
++
++    internal fun shouldDeletePartialOnStop(downloadId: String): Boolean =
++        cancelledDownloadIds.contains(downloadId)
++
++    internal fun onWorkerStoppedByUser(
++        downloadId: String,
++        trackId: String,
++    ) {
++        if (cancelledDownloadIds.remove(downloadId)) {
++            fileManager.deleteTrackFiles(trackId)
++            activeTasks.remove(downloadId)
++            playlistAssociations.remove(downloadId)
++            trackMetadata.remove(trackId)
++        }
++    }
++
++    internal fun registerTrackFromWorker(
++        downloadId: String,
++        track: TrackItem,
++        playlistId: String?,
++    ) {
++        trackMetadata[track.id] = track
++        if (!playlistId.isNullOrEmpty()) {
++            playlistAssociations[downloadId] = playlistId
++        }
++
++        activeTasks.compute(downloadId) { _, existing ->
++            if (existing != null) {
++                if (existing.state != DownloadState.PAUSED && existing.state != DownloadState.CANCELLED) {
++                    existing.state = DownloadState.DOWNLOADING
++                    if (existing.startedAt == null) {
++                        existing.startedAt = System.currentTimeMillis().toDouble()
++                    }
++                }
++                existing
++            } else {
++                DownloadTaskMetadata(
++                    downloadId = downloadId,
++                    trackId = track.id,
++                    playlistId = playlistId,
++                    state = if (pausedDownloadIds.contains(downloadId)) DownloadState.PAUSED else DownloadState.DOWNLOADING,
++                    createdAt = System.currentTimeMillis().toDouble(),
++                    startedAt = System.currentTimeMillis().toDouble(),
++                )
++            }
++        }
++    }
++
++    private fun createWorkerInputData(
++        downloadId: String,
++        track: TrackItem,
++        playlistId: String?,
++    ): Data {
++        val artwork = track.artwork?.asSecondOrNull() ?: ""
++        return workDataOf(
++            DownloadWorker.KEY_DOWNLOAD_ID to downloadId,
++            DownloadWorker.KEY_TRACK_ID to track.id,
++            DownloadWorker.KEY_URL to track.url,
++            DownloadWorker.KEY_PLAYLIST_ID to (playlistId ?: ""),
++            DownloadWorker.KEY_STORAGE_LOCATION to (config.storageLocation?.name ?: StorageLocation.PRIVATE.name),
++            DownloadWorker.KEY_TRACK_TITLE to track.title,
++            DownloadWorker.KEY_TRACK_ARTIST to track.artist,
++            DownloadWorker.KEY_TRACK_ALBUM to track.album,
++            DownloadWorker.KEY_TRACK_DURATION to track.duration,
++            DownloadWorker.KEY_TRACK_ARTWORK to artwork,
++        )
++    }
++
+     private fun notifyStateChange(
+         downloadId: String,
+         trackId: String,
+diff --git a/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadWorker.kt b/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadWorker.kt
+index 8691515..8edf20a 100644
+--- a/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadWorker.kt
++++ b/node_modules/react-native-nitro-player/android/src/main/java/com/margelo/nitro/nitroplayer/download/DownloadWorker.kt
+@@ -10,6 +10,7 @@ import androidx.work.ForegroundInfo
+ import androidx.work.WorkerParameters
+ import com.margelo.nitro.nitroplayer.*
+ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.withContext
+ import java.io.BufferedInputStream
+ import java.io.File
+@@ -30,6 +31,11 @@ class DownloadWorker(
+         const val KEY_URL = "url"
+         const val KEY_PLAYLIST_ID = "playlist_id"
+         const val KEY_STORAGE_LOCATION = "storage_location"
++        const val KEY_TRACK_TITLE = "track_title"
++        const val KEY_TRACK_ARTIST = "track_artist"
++        const val KEY_TRACK_ALBUM = "track_album"
++        const val KEY_TRACK_DURATION = "track_duration"
++        const val KEY_TRACK_ARTWORK = "track_artwork"
+ 
+         private const val NOTIFICATION_CHANNEL_ID = "nitro_player_downloads"
+         private const val NOTIFICATION_ID = 2001
+@@ -44,6 +50,7 @@ class DownloadWorker(
+             val downloadId = inputData.getString(KEY_DOWNLOAD_ID) ?: return@withContext Result.failure()
+             val trackId = inputData.getString(KEY_TRACK_ID) ?: return@withContext Result.failure()
+             val urlString = inputData.getString(KEY_URL) ?: return@withContext Result.failure()
++            val playlistId = inputData.getString(KEY_PLAYLIST_ID)?.takeIf { it.isNotBlank() }
+             val storageLocationStr = inputData.getString(KEY_STORAGE_LOCATION) ?: StorageLocation.PRIVATE.name
+ 
+             val storageLocation =
+@@ -53,17 +60,40 @@ class DownloadWorker(
+                     StorageLocation.PRIVATE
+                 }
+ 
++            val track = buildTrackFromInput(trackId, urlString)
++            downloadManager.registerTrackFromWorker(downloadId, track, playlistId)
++
+             try {
+-                // Set foreground notification
++                if (downloadManager.isDownloadStoppedByUser(downloadId)) {
++                    downloadManager.onWorkerStoppedByUser(downloadId, trackId)
++                    return@withContext Result.success()
++                }
++
+                 setForeground(createForegroundInfo(trackId))
+ 
+-                // Perform download
+                 val localPath = downloadFile(downloadId, trackId, urlString, storageLocation)
+ 
++                if (isStopped) {
++                    if (downloadManager.isDownloadStoppedByUser(downloadId)) {
++                        downloadManager.onWorkerStoppedByUser(downloadId, trackId)
++                        return@withContext Result.success()
++                    }
++                    return@withContext Result.retry()
++                }
++
+                 if (localPath != null) {
+-                    downloadManager.onComplete(downloadId, trackId, localPath)
++                    downloadManager.onComplete(downloadId, trackId, localPath, track, playlistId)
+                     Result.success()
+                 } else {
++                    if (downloadManager.isDownloadStoppedByUser(downloadId)) {
++                        downloadManager.onWorkerStoppedByUser(downloadId, trackId)
++                        return@withContext Result.success()
++                    }
++
++                    if (isStopped) {
++                        return@withContext Result.retry()
++                    }
++
+                     val error =
+                         DownloadError(
+                             code = "DOWNLOAD_FAILED",
+@@ -74,7 +104,19 @@ class DownloadWorker(
+                     downloadManager.onError(downloadId, trackId, error)
+                     Result.retry()
+                 }
++            } catch (e: CancellationException) {
++                if (downloadManager.isDownloadStoppedByUser(downloadId)) {
++                    downloadManager.onWorkerStoppedByUser(downloadId, trackId)
++                    Result.success()
++                } else {
++                    Result.retry()
++                }
+             } catch (e: Exception) {
++                if (downloadManager.isDownloadStoppedByUser(downloadId)) {
++                    downloadManager.onWorkerStoppedByUser(downloadId, trackId)
++                    return@withContext Result.success()
++                }
++
+                 val errorReason =
+                     when {
+                         e.message?.contains("network", ignoreCase = true) == true -> DownloadErrorReason.NETWORK_ERROR
+@@ -112,31 +154,59 @@ class DownloadWorker(
+             var outputStream: FileOutputStream? = null
+ 
+             try {
++                val destinationFile = fileManager.createDownloadFile(trackId, storageLocation)
++                var resumeFromBytes = if (destinationFile.exists()) destinationFile.length() else 0L
++                val requestedResume = resumeFromBytes > 0L
++
+                 val url = URL(urlString)
+                 connection = url.openConnection() as HttpURLConnection
+                 connection.connectTimeout = 30000
+                 connection.readTimeout = 30000
++                if (requestedResume) {
++                    connection.setRequestProperty("Range", "bytes=$resumeFromBytes-")
++                }
+                 connection.connect()
+ 
+                 val responseCode = connection.responseCode
+-                if (responseCode != HttpURLConnection.HTTP_OK) {
++                if (responseCode != HttpURLConnection.HTTP_OK && responseCode != HttpURLConnection.HTTP_PARTIAL) {
+                     throw Exception("Server returned HTTP $responseCode")
+                 }
+ 
+-                val totalBytes = connection.contentLengthLong
+-                var bytesDownloaded: Long = 0
++                if (requestedResume && responseCode == HttpURLConnection.HTTP_OK) {
++                    destinationFile.delete()
++                    resumeFromBytes = 0L
++                }
+ 
+-                // Create destination file
+-                val destinationFile = fileManager.createDownloadFile(trackId, storageLocation)
++                val contentRangeTotal = parseContentRangeTotal(connection.getHeaderField("Content-Range"))
++                val remainingBytes = connection.contentLengthLong
++                val totalBytes =
++                    when {
++                        contentRangeTotal != null -> contentRangeTotal
++                        remainingBytes > 0 -> resumeFromBytes + remainingBytes
++                        else -> -1L
++                    }
++                var bytesDownloaded: Long = resumeFromBytes
+ 
+                 inputStream = BufferedInputStream(connection.inputStream)
+-                outputStream = FileOutputStream(destinationFile)
++                outputStream = FileOutputStream(destinationFile, resumeFromBytes > 0L)
+ 
+                 val buffer = ByteArray(BUFFER_SIZE)
+                 var bytesRead: Int
+                 var lastProgressUpdate = System.currentTimeMillis()
+ 
++                if (resumeFromBytes > 0L) {
++                    downloadManager.onProgress(downloadId, trackId, bytesDownloaded, totalBytes)
++                }
++
+                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
++                    if (isStopped) {
++                        try { outputStream.close() } catch (_: Exception) {}
++                        if (downloadManager.shouldDeletePartialOnStop(downloadId)) {
++                            destinationFile.delete()
++                        }
++                        return@withContext null
++                    }
++
+                     outputStream.write(buffer, 0, bytesRead)
+                     bytesDownloaded += bytesRead
+ 
+@@ -167,6 +237,49 @@ class DownloadWorker(
+             }
+         }
+ 
++    private fun buildTrackFromInput(
++        trackId: String,
++        urlString: String,
++    ): TrackItem {
++        val artworkString = inputData.getString(KEY_TRACK_ARTWORK)
++        val artworkVariant =
++            if (!artworkString.isNullOrBlank()) {
++                Variant_NullType_String.create(artworkString)
++            } else {
++                null
++            }
++
++        return TrackItem(
++            id = trackId,
++            title = inputData.getString(KEY_TRACK_TITLE) ?: trackId,
++            artist = inputData.getString(KEY_TRACK_ARTIST) ?: "",
++            album = inputData.getString(KEY_TRACK_ALBUM) ?: "",
++            duration = inputData.getDouble(KEY_TRACK_DURATION, 0.0),
++            url = urlString,
++            artwork = artworkVariant,
++            extraPayload = null,
++        )
++    }
++
++    private fun parseContentRangeTotal(contentRange: String?): Long? {
++        if (contentRange.isNullOrBlank()) {
++            return null
++        }
++
++        val normalized = contentRange.trim()
++        val slashIndex = normalized.lastIndexOf('/')
++        if (slashIndex < 0 || slashIndex >= normalized.length - 1) {
++            return null
++        }
++
++        val totalPart = normalized.substring(slashIndex + 1).trim()
++        if (totalPart == "*") {
++            return null
++        }
++
++        return totalPart.toLongOrNull()
++    }
++
+     private fun createForegroundInfo(trackId: String): ForegroundInfo {
+         createNotificationChannel()
+ 
+diff --git a/node_modules/react-native-nitro-player/lib/hooks/useDownloadProgress.js b/node_modules/react-native-nitro-player/lib/hooks/useDownloadProgress.js
+index acb10fa..78bf59e 100644
+--- a/node_modules/react-native-nitro-player/lib/hooks/useDownloadProgress.js
++++ b/node_modules/react-native-nitro-player/lib/hooks/useDownloadProgress.js
+@@ -19,7 +19,10 @@ export function useDownloadProgress(options = {}) {
+             !downloadIds.includes(progress.downloadId)) {
+             return false;
+         }
+-        if (activeOnly && progress.state !== 'downloading') {
++        if (activeOnly &&
++            progress.state !== 'pending' &&
++            progress.state !== 'downloading' &&
++            progress.state !== 'paused') {
+             return false;
+         }
+         return true;
+@@ -40,26 +43,66 @@ export function useDownloadProgress(options = {}) {
+         catch (error) {
+             console.error('[useDownloadProgress] Error initializing:', error);
+         }
+-        const unsubscribe = downloadCallbackManager.subscribeToProgress((progress) => {
++        const unsubscribeProgress = downloadCallbackManager.subscribeToProgress((progress) => {
+             if (!isMounted.current)
+                 return;
+-            if (!shouldTrack(progress))
+-                return;
+             setProgressMap((prev) => {
+                 const next = new Map(prev);
+                 if (progress.state === 'completed' ||
+                     progress.state === 'cancelled') {
+                     next.delete(progress.trackId);
++                    return next;
++                }
++                if (!shouldTrack(progress)) {
++                    return next;
++                }
++                next.set(progress.trackId, progress);
++                return next;
++            });
++        });
++        const unsubscribeStateChange = downloadCallbackManager.subscribeToStateChange((downloadId, trackId, state) => {
++            if (!isMounted.current)
++                return;
++            setProgressMap((prev) => {
++                const next = new Map(prev);
++                const existing = next.get(trackId);
++                if (state === 'completed' || state === 'cancelled') {
++                    next.delete(trackId);
++                    return next;
+                 }
+-                else {
+-                    next.set(progress.trackId, progress);
++                const nextProgress = {
++                    trackId,
++                    downloadId: (existing === null || existing === void 0 ? void 0 : existing.downloadId) ?? downloadId,
++                    bytesDownloaded: (existing === null || existing === void 0 ? void 0 : existing.bytesDownloaded) ?? 0,
++                    totalBytes: (existing === null || existing === void 0 ? void 0 : existing.totalBytes) ?? 0,
++                    progress: (existing === null || existing === void 0 ? void 0 : existing.progress) ?? 0,
++                    state,
++                };
++                if (!shouldTrack(nextProgress)) {
++                    next.delete(trackId);
++                    return next;
+                 }
++                next.set(trackId, nextProgress);
++                return next;
++            });
++        });
++        const unsubscribeComplete = downloadCallbackManager.subscribeToComplete((downloadedTrack) => {
++            if (!isMounted.current)
++                return;
++            setProgressMap((prev) => {
++                if (!prev.has(downloadedTrack.trackId)) {
++                    return prev;
++                }
++                const next = new Map(prev);
++                next.delete(downloadedTrack.trackId);
+                 return next;
+             });
+         });
+         return () => {
+             isMounted.current = false;
+-            unsubscribe();
++            unsubscribeProgress();
++            unsubscribeStateChange();
++            unsubscribeComplete();
+         };
+     }, [shouldTrack]);
+     const progressList = Array.from(progressMap.values());
+diff --git a/node_modules/react-native-nitro-player/src/hooks/useDownloadProgress.ts b/node_modules/react-native-nitro-player/src/hooks/useDownloadProgress.ts
+index b7ef699..645d4d7 100644
+--- a/node_modules/react-native-nitro-player/src/hooks/useDownloadProgress.ts
++++ b/node_modules/react-native-nitro-player/src/hooks/useDownloadProgress.ts
+@@ -53,7 +53,12 @@ export function useDownloadProgress(
+       ) {
+         return false
+       }
+-      if (activeOnly && progress.state !== 'downloading') {
++      if (
++        activeOnly &&
++        progress.state !== 'pending' &&
++        progress.state !== 'downloading' &&
++        progress.state !== 'paused'
++      ) {
+         return false
+       }
+       return true
+@@ -78,10 +83,9 @@ export function useDownloadProgress(
+       console.error('[useDownloadProgress] Error initializing:', error)
+     }
+ 
+-    const unsubscribe = downloadCallbackManager.subscribeToProgress(
++    const unsubscribeProgress = downloadCallbackManager.subscribeToProgress(
+       (progress) => {
+         if (!isMounted.current) return
+-        if (!shouldTrack(progress)) return
+ 
+         setProgressMap((prev) => {
+           const next = new Map(prev)
+@@ -90,9 +94,59 @@ export function useDownloadProgress(
+             progress.state === 'cancelled'
+           ) {
+             next.delete(progress.trackId)
+-          } else {
+-            next.set(progress.trackId, progress)
++            return next
++          }
++          if (!shouldTrack(progress)) {
++            return next
++          }
++          next.set(progress.trackId, progress)
++          return next
++        })
++      }
++    )
++
++    const unsubscribeStateChange = downloadCallbackManager.subscribeToStateChange(
++      (downloadId, trackId, state) => {
++        if (!isMounted.current) return
++
++        setProgressMap((prev) => {
++          const next = new Map(prev)
++          const existing = next.get(trackId)
++
++          if (state === 'completed' || state === 'cancelled') {
++            next.delete(trackId)
++            return next
+           }
++
++          const nextProgress: DownloadProgress = {
++            trackId,
++            downloadId: existing?.downloadId ?? downloadId,
++            bytesDownloaded: existing?.bytesDownloaded ?? 0,
++            totalBytes: existing?.totalBytes ?? 0,
++            progress: existing?.progress ?? 0,
++            state,
++          }
++
++          if (!shouldTrack(nextProgress)) {
++            next.delete(trackId)
++            return next
++          }
++
++          next.set(trackId, nextProgress)
++          return next
++        })
++      }
++    )
++
++    const unsubscribeComplete = downloadCallbackManager.subscribeToComplete(
++      (downloadedTrack) => {
++        if (!isMounted.current) return
++        setProgressMap((prev) => {
++          if (!prev.has(downloadedTrack.trackId)) {
++            return prev
++          }
++          const next = new Map(prev)
++          next.delete(downloadedTrack.trackId)
+           return next
+         })
+       }
+@@ -100,7 +154,9 @@ export function useDownloadProgress(
+ 
+     return () => {
+       isMounted.current = false
+-      unsubscribe()
++      unsubscribeProgress()
++      unsubscribeStateChange()
++      unsubscribeComplete()
+     }
+   }, [shouldTrack])
+ 
