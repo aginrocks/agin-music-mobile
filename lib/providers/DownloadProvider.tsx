@@ -193,6 +193,12 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
 
             if (state === 'failed' || state === 'cancelled') {
                 progressBufferRef.current.delete(trackId);
+                LayoutAnimation.configureNext({
+                    duration: 350,
+                    create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+                    update: { type: LayoutAnimation.Types.easeInEaseOut },
+                    delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+                });
                 setProgressMap(prev => {
                     if (!prev.has(trackId)) return prev;
                     const next = new Map(prev);
