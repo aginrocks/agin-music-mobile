@@ -3,7 +3,7 @@ import Header from '@lib/components/Header';
 import Setting, { SettingSelectOption } from '@lib/components/Setting';
 import SettingsSection from '@lib/components/SettingsSection';
 import Title from '@lib/components/Title';
-import { useCache, useColors, useMemoryCache } from '@lib/hooks';
+import { useCache, useColors, useMemoryCache, useTabsHeight } from '@lib/hooks';
 import { IconCircleCheck, IconDoor, IconFileMusic, IconLayoutGrid, IconVolume } from '@tabler/icons-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
@@ -184,6 +184,7 @@ function EQSection() {
 export default function Settings() {
     const cache = useCache();
     const memoryCache = useMemoryCache();
+    const [tabsHeight] = useTabsHeight();
 
     const styles = useMemo(() => StyleSheet.create({
         settings: {
@@ -197,7 +198,7 @@ export default function Settings() {
     return (
         <Container>
             <Header title="Settings" withBackIcon withAvatar={false} titleSize={20} />
-            <ScrollView>
+            <ScrollView contentContainerStyle={{ paddingBottom: tabsHeight }}>
                 <View style={styles.settings}>
                     <SettingsSection label='Launch' />
                     <Setting

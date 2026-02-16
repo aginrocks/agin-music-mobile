@@ -289,19 +289,28 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
     }, [cache.fetchChild, downloadTrack]);
 
     const downloadPlaylist = useCallback(async (playlistId: string, tracks: Child[]) => {
-        const trackItems = tracks.map(convertToTrackItem);
+        const newTracks = tracks.filter(t => !DownloadManager.isTrackDownloaded(t.id) && !DownloadManager.isDownloading(t.id));
+        if (newTracks.length === 0) {
+            showToast({ title: 'Already Downloaded', subtitle: `All ${tracks.length} tracks are downloaded` });
+            return;
+        }
+        const trackItems = newTracks.map(convertToTrackItem);
         setDownloadingMeta(prev => {
             const next = new Map(prev);
-            tracks.forEach(track => next.set(track.id, track));
+            newTracks.forEach(track => next.set(track.id, track));
             return next;
         });
         try {
             await actions.downloadPlaylist(playlistId, trackItems);
-            showToast({ title: 'Downloading', subtitle: `${tracks.length} tracks`, icon: IconDownload });
+            const skipped = tracks.length - newTracks.length;
+            const subtitle = skipped > 0
+                ? `${newTracks.length} tracks (${skipped} already downloaded)`
+                : `${newTracks.length} tracks`;
+            showToast({ title: 'Downloading', subtitle, icon: IconDownload });
         } catch (e) {
             setDownloadingMeta(prev => {
                 const next = new Map(prev);
-                tracks.forEach(track => next.delete(track.id));
+                newTracks.forEach(track => next.delete(track.id));
                 return next;
             });
             showToast({ title: 'Download Error', subtitle: String(e), haptics: 'error', icon: IconCircleX });
