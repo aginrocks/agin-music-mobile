@@ -9,6 +9,7 @@ import SheetOption from '@lib/components/sheet/SheetOption';
 import { IconArrowsShuffle, IconCirclePlus, IconCopy, IconDownload, IconMicrophone2, IconPin, IconPinnedOff, IconPlayerPlay } from '@tabler/icons-react-native';
 import * as Clipboard from 'expo-clipboard';
 import showToast from '@lib/showToast';
+import { useRouter } from 'expo-router';
 
 function AlbumSheet({ sheetId, payload }: SheetProps<'album'>) {
     const insets = useSafeAreaInsets();
@@ -17,6 +18,7 @@ function AlbumSheet({ sheetId, payload }: SheetProps<'album'>) {
     const helpers = useApiHelpers();
     const queue = useQueue();
 
+    const router = useRouter();
     const copyIdEnabled = useSetting('developer.copyId');
 
     const downloads = useDownloads();
@@ -90,13 +92,14 @@ function AlbumSheet({ sheetId, payload }: SheetProps<'album'>) {
                     SheetManager.hide(sheetId);
                 }}
                 />} */}
-            <SheetOption
+            {data?.artistId && <SheetOption
                 icon={IconMicrophone2}
                 label='Go to Artist'
                 onPress={() => {
                     SheetManager.hide(sheetId);
+                    router.push({ pathname: '/artists/[id]', params: { id: data.artistId! } });
                 }}
-            />
+            />}
             {payload?.context != 'album' && data?.song && <SheetOption
                 icon={IconDownload}
                 label='Download Album'
