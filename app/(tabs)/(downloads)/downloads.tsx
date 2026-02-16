@@ -7,7 +7,8 @@ import ActionIcon from "@lib/components/ActionIcon";
 import { useColors, useCoverBuilder, useDownloads, useQueue, useTabsHeight } from "@lib/hooks";
 import { IconCircleArrowDown, IconPlayerPause, IconPlayerPlay, IconTrash, IconX } from "@tabler/icons-react-native";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { Animated, LayoutAnimation, Pressable, SectionList, StyleSheet, View } from "react-native";
+import { Animated as RNAnimated, Pressable, StyleSheet, View } from "react-native";
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { SheetManager } from "react-native-actions-sheet";
 import * as Haptics from "expo-haptics";
 import showToast from "@lib/showToast";
@@ -23,8 +24,9 @@ function formatBytes(bytes: number): string {
 }
 
 type DownloadRow =
-    | { type: 'active'; data: DownloadProgress; meta?: Child }
-    | { type: 'completed'; data: DownloadedTrack };
+    | { type: 'active'; key: string; data: DownloadProgress; meta?: Child }
+    | { type: 'completed'; key: string; data: DownloadedTrack }
+    | { type: 'header'; key: string; title: string };
 
 const ActiveDownloadItem = React.memo(function ActiveDownloadItem({
     progress,
@@ -45,10 +47,9 @@ const ActiveDownloadItem = React.memo(function ActiveDownloadItem({
     const coverArt = meta?.coverArt;
     const isPaused = progress.state === 'paused';
 
-    // Smooth animated progress bar
-    const animatedProgress = useRef(new Animated.Value(progress.progress)).current;
+    const animatedProgress = useRef(new RNAnimated.Value(progress.progress)).current;
     useEffect(() => {
-        Animated.timing(animatedProgress, {
+        RNAnimated.timing(animatedProgress, {
             toValue: progress.progress,
             duration: 400,
             useNativeDriver: false,
@@ -96,7 +97,7 @@ const ActiveDownloadItem = React.memo(function ActiveDownloadItem({
                 <Title size={14} numberOfLines={1}>{meta?.title ?? 'Downloading...'}</Title>
                 <Title size={12} color={colors.text[1]} fontFamily="Poppins-Regular" numberOfLines={1}>{meta?.artist ?? 'Downloading...'}</Title>
                 <View style={{ height: 3, borderRadius: 2, backgroundColor: colors.border[0], marginTop: 4, overflow: 'hidden' }}>
-                    <Animated.View style={{ height: '100%', width: animatedWidth, backgroundColor: isPaused ? colors.text[1] : colors.forcedTint, borderRadius: 2 }} />
+                    <RNAnimated.View style={{ height: '100%', width: animatedWidth, backgroundColor: isPaused ? colors.text[1] : colors.forcedTint, borderRadius: 2 }} />
                 </View>
                 <Title size={11} color={colors.text[1]} fontFamily="Poppins-Regular" style={{ marginTop: 2 }}>
                     {statusText}
@@ -219,7 +220,6 @@ export default function Downloads() {
         },
     }), [colors]);
 
-    // Stable callbacks for active download items
     const handlePause = useCallback((downloadId: string) => {
         downloads.pauseDownload(downloadId).catch(() => { });
     }, [downloads.pauseDownload]);
@@ -258,11 +258,6 @@ export default function Downloads() {
             }
         });
         if (!confirmed) return;
-        LayoutAnimation.configureNext({
-            duration: 350,
-            update: { type: LayoutAnimation.Types.easeInEaseOut },
-            delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
-        });
         await downloads.deleteAll();
         showToast({ title: 'All Downloads Deleted', icon: IconTrash });
     }, [downloads.deleteAll]);
@@ -270,6 +265,7 @@ export default function Downloads() {
     const activeRows: DownloadRow[] = useMemo(() =>
         downloads.activeDownloads.map(p => ({
             type: 'active' as const,
+            key: `active-${p.trackId}`,
             data: p,
             meta: downloads.getDownloadingMeta(p.trackId),
         })),
@@ -286,20 +282,23 @@ export default function Downloads() {
             .filter(t => !activeTrackIds.has(t.trackId))
             .map(t => ({
                 type: 'completed' as const,
+                key: `dl-${t.trackId}`,
                 data: t,
             })),
         [downloads.downloadedTracks, activeTrackIds]
     );
 
-    const sections = useMemo(() => {
-        const s = [];
+    const flatData: DownloadRow[] = useMemo(() => {
+        const items: DownloadRow[] = [];
         if (activeRows.length > 0) {
-            s.push({ title: 'Downloading', data: activeRows });
+            items.push({ type: 'header', key: 'header-downloading', title: 'Downloading' });
+            items.push(...activeRows);
         }
         if (completedRows.length > 0) {
-            s.push({ title: `Downloaded \u2022 ${completedRows.length} tracks`, data: completedRows });
+            items.push({ type: 'header', key: 'header-downloaded', title: `Downloaded \u2022 ${completedRows.length} tracks` });
+            items.push(...completedRows);
         }
-        return s;
+        return items;
     }, [activeRows, completedRows]);
 
     const isEmpty = activeRows.length === 0 && completedRows.length === 0;
@@ -311,39 +310,41 @@ export default function Downloads() {
             : undefined;
 
     const renderItem = useCallback(({ item }: { item: DownloadRow }) => {
+        if (item.type === 'header') {
+            return (
+                <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} layout={LinearTransition.duration(250)} style={styles.sectionHeader}>
+                    <Title size={13} fontFamily="Poppins-SemiBold" color={colors.text[1]}>{item.title}</Title>
+                </Animated.View>
+            );
+        }
         if (item.type === 'active') {
             return (
-                <ActiveDownloadItem
-                    progress={item.data}
-                    meta={item.meta}
-                    onPause={handlePause}
-                    onResume={handleResume}
-                    onCancel={handleCancelDownload}
-                />
+                <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(250)} layout={LinearTransition.duration(250)}>
+                    <ActiveDownloadItem
+                        progress={item.data}
+                        meta={item.meta}
+                        onPause={handlePause}
+                        onResume={handleResume}
+                        onCancel={handleCancelDownload}
+                    />
+                </Animated.View>
             );
         }
         return (
-            <CompletedDownloadItem
-                trackId={item.data.trackId}
-                track={item.data.originalTrack}
-                fileSize={item.data.fileSize}
-                localArtworkPath={item.data.localArtworkPath}
-                onPlay={handlePlay}
-                onLongPress={handleLongPress}
-            />
+            <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(250)} layout={LinearTransition.duration(250)}>
+                <CompletedDownloadItem
+                    trackId={item.data.trackId}
+                    track={item.data.originalTrack}
+                    fileSize={item.data.fileSize}
+                    localArtworkPath={item.data.localArtworkPath}
+                    onPlay={handlePlay}
+                    onLongPress={handleLongPress}
+                />
+            </Animated.View>
         );
-    }, [handlePause, handleResume, handleCancelDownload, handlePlay, handleLongPress]);
+    }, [handlePause, handleResume, handleCancelDownload, handlePlay, handleLongPress, styles.sectionHeader, colors.text]);
 
-    const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
-        <View style={styles.sectionHeader}>
-            <Title size={13} fontFamily="Poppins-SemiBold" color={colors.text[1]}>{section.title}</Title>
-        </View>
-    ), [styles.sectionHeader, colors.text]);
-
-    const keyExtractor = useCallback((item: DownloadRow) =>
-        item.type === 'active' ? `active-${item.data.trackId}` : `dl-${item.data.trackId}`,
-        []
-    );
+    const keyExtractor = useCallback((item: DownloadRow) => item.key, []);
 
     const listFooter = useMemo(() =>
         completedRows.length > 0 ? (
@@ -370,13 +371,13 @@ export default function Downloads() {
                     />
                 </View>
             ) : (
-                <SectionList
-                    sections={sections}
+                <Animated.FlatList
+                    data={flatData}
                     keyExtractor={keyExtractor}
-                    renderSectionHeader={renderSectionHeader}
                     renderItem={renderItem}
                     ListFooterComponent={listFooter}
-                    stickySectionHeadersEnabled={false}
+                    itemLayoutAnimation={LinearTransition.duration(250)}
+                    skipEnteringExitingAnimations
                 />
             )}
         </Container>

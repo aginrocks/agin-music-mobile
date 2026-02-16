@@ -1,9 +1,4 @@
 import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutAnimation, Platform, UIManager } from 'react-native';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 import { useCache, useCoverBuilder, useServer, useSubsonicParams } from '@lib/hooks';
 import {
     DownloadManager,
@@ -92,6 +87,8 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
     const completingRef = useRef<Set<string>>(new Set());
     const pendingCleanupRef = useRef<Set<string>>(new Set());
     const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const progressMapRef = useRef(progressMap);
+    progressMapRef.current = progressMap;
 
     const flushProgressBuffer = useCallback(() => {
         flushTimerRef.current = null;
@@ -129,7 +126,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
             return;
         }
 
-        // Initialize progress from active downloads
         try {
             const active = DownloadManager.getActiveDownloads();
             const initialMap = new Map<string, DownloadProgress>();
@@ -144,7 +140,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
             }
         } catch { }
 
-        // Progress events: buffer and flush on interval
         DownloadManager.onDownloadProgress((progress) => {
             progressBufferRef.current.set(progress.trackId, progress);
             if (!flushTimerRef.current) {
@@ -152,7 +147,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
             }
         });
 
-        // State changes: update immediately for responsive UI
         DownloadManager.onDownloadStateChange((_downloadId, trackId, state, error) => {
             if (state === 'pending') {
                 setProgressMap(prev => {
@@ -193,12 +187,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
 
             if (state === 'failed' || state === 'cancelled') {
                 progressBufferRef.current.delete(trackId);
-                LayoutAnimation.configureNext({
-                    duration: 350,
-                    create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
-                    update: { type: LayoutAnimation.Types.easeInEaseOut },
-                    delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
-                });
                 setProgressMap(prev => {
                     if (!prev.has(trackId)) return prev;
                     const next = new Map(prev);
@@ -217,7 +205,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
                 progressBufferRef.current.delete(trackId);
                 if (!completingRef.current.has(trackId)) {
                     completingRef.current.add(trackId);
-                    // Set to 100% so the progress bar animates to full
                     setProgressMap(prev => {
                         const existing = prev.get(trackId);
                         if (!existing) return prev;
@@ -225,7 +212,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
                         next.set(trackId, { ...existing, progress: 1 });
                         return next;
                     });
-                    // After bar fills, batch cleanup with LayoutAnimation
                     setTimeout(() => {
                         completingRef.current.delete(trackId);
                         pendingCleanupRef.current.add(trackId);
@@ -234,12 +220,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
                             cleanupTimerRef.current = null;
                             const toClean = new Set(pendingCleanupRef.current);
                             pendingCleanupRef.current.clear();
-                            LayoutAnimation.configureNext({
-                                duration: 350,
-                                create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
-                                update: { type: LayoutAnimation.Types.easeInEaseOut },
-                                delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
-                            });
                             setProgressMap(prev => {
                                 const next = new Map(prev);
                                 toClean.forEach(id => next.delete(id));
@@ -300,7 +280,7 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
             showToast({ title: 'Already Downloaded', subtitle: child.title });
             return;
         }
-        if (DownloadManager.isDownloading(child.id)) {
+        if (DownloadManager.isDownloading(child.id) || progressMapRef.current.has(child.id)) {
             showToast({ title: 'Already Downloading', subtitle: child.title });
             return;
         }
@@ -326,7 +306,8 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
     }, [cache.fetchChild, downloadTrack]);
 
     const downloadPlaylist = useCallback(async (playlistId: string, tracks: Child[]) => {
-        const newTracks = tracks.filter(t => !DownloadManager.isTrackDownloaded(t.id) && !DownloadManager.isDownloading(t.id));
+        const currentProgress = progressMapRef.current;
+        const newTracks = tracks.filter(t => !DownloadManager.isTrackDownloaded(t.id) && !DownloadManager.isDownloading(t.id) && !currentProgress.has(t.id));
         if (newTracks.length === 0) {
             showToast({ title: 'Already Downloaded', subtitle: `All ${tracks.length} tracks are downloaded` });
             return;
@@ -370,7 +351,6 @@ export default function DownloadProvider({ children }: { children?: React.ReactN
         return downloadingMeta.get(trackId);
     }, [downloadingMeta]);
 
-    // Fetch metadata for active downloads that are missing it (e.g. after app restart)
     useEffect(() => {
         const missingTrackIds: string[] = [];
         progressMap.forEach((_, trackId) => {
