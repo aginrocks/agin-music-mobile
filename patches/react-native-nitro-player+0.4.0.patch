@@ -38,6 +38,28 @@ index 8691515..0637708 100644
                      outputStream.write(buffer, 0, bytesRead)
                      bytesDownloaded += bytesRead
  
+diff --git a/node_modules/react-native-nitro-player/ios/equalizer/EqualizerCore.swift b/node_modules/react-native-nitro-player/ios/equalizer/EqualizerCore.swift
+index bbfc1d3..b3de54a 100644
+--- a/node_modules/react-native-nitro-player/ios/equalizer/EqualizerCore.swift
++++ b/node_modules/react-native-nitro-player/ios/equalizer/EqualizerCore.swift
+@@ -128,7 +128,7 @@ class EqualizerCore {
+         process: tapProcessCallback
+       )
+ 
+-      var tap: MTAudioProcessingTap?
++      var tap: Unmanaged<MTAudioProcessingTap>?
+       let createStatus = MTAudioProcessingTapCreate(
+         kCFAllocatorDefault,
+         &callbacks,
+@@ -136,7 +136,7 @@ class EqualizerCore {
+         &tap
+       )
+ 
+-      guard createStatus == noErr, let audioTap = tap else {
++      guard createStatus == noErr, let audioTap = tap?.takeRetainedValue() else {
+         print("❌ EqualizerCore: Failed to create audio processing tap, status: \(createStatus)")
+         return
+       }
 diff --git a/node_modules/react-native-nitro-player/src/hooks/useDownloadedTracks.ts b/node_modules/react-native-nitro-player/src/hooks/useDownloadedTracks.ts
 index 5c7f61f..ccd9dc6 100644
 --- a/node_modules/react-native-nitro-player/src/hooks/useDownloadedTracks.ts
