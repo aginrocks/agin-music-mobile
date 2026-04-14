@@ -4,3 +4,4 @@ export * from './generateSubsonicToken';
 export * from './secondsToTimecode';
 export * from './prependKeysWithDollar';
 export * from './shuffleArray';
+export * from './historyHelpers';

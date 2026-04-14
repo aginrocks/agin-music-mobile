@@ -26,6 +26,7 @@ import PinsProvider from '@lib/providers/PinsProvider';
 import DownloadProvider from '@lib/providers/DownloadProvider';
 import { registerWidgetTaskHandler } from 'react-native-android-widget';
 import { widgetTaskHandler } from '@lib/widget-task-handler';
+import { PlaybackHistoryTracker } from '@lib/components/PlaybackHistoryTracker';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -85,24 +86,26 @@ export default function RootLayout() {
             <ServerProvider>
               <SearchHistoryProvider>
                 <QueueProvider>
-                  <DownloadProvider>
-                  <MemoryCacheProvider>
-                    <PinsProvider>
-                      <GestureHandlerRootView style={{ flex: 1 }}>
-                        <SheetProvider>
-                          <Stack>
-                            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                            <Stack.Screen name="+not-found" />
-                            <Stack.Screen name="login" options={{ headerShown: false }} />
-                            <Stack.Screen name="login-password" options={{ headerShown: false }} />
-                          </Stack>
-                          <ToastWrapper />
-                          <StatusBar style="auto" />
-                        </SheetProvider>
-                      </GestureHandlerRootView>
-                    </PinsProvider>
-                  </MemoryCacheProvider>
-                  </DownloadProvider>
+                  <PlaybackHistoryTracker>
+                    <DownloadProvider>
+                    <MemoryCacheProvider>
+                      <PinsProvider>
+                        <GestureHandlerRootView style={{ flex: 1 }}>
+                          <SheetProvider>
+                            <Stack>
+                              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                              <Stack.Screen name="+not-found" />
+                              <Stack.Screen name="login" options={{ headerShown: false }} />
+                              <Stack.Screen name="login-password" options={{ headerShown: false }} />
+                            </Stack>
+                            <ToastWrapper />
+                            <StatusBar style="auto" />
+                          </SheetProvider>
+                        </GestureHandlerRootView>
+                      </PinsProvider>
+                    </MemoryCacheProvider>
+                    </DownloadProvider>
+                  </PlaybackHistoryTracker>
                 </QueueProvider>
               </SearchHistoryProvider>
             </ServerProvider>

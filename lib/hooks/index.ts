@@ -17,3 +17,4 @@ export * from './useSearchHistory';
 export * from './useSearchItemActions';
 export * from './useHomeItemActions';
 export * from './useDownloads';
+export * from './usePlaybackHistory';

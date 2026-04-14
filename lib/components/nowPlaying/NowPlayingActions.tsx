@@ -46,7 +46,7 @@ export default function NowPlayingActions() {
                         context: 'nowPlaying'
                     }
                 });
-                if (data.shouldCloseSheet) SheetManager.hide(sheetId);
+                if (data?.shouldCloseSheet) SheetManager.hide(sheetId);
             }} />
         </View>
     )

@@ -56,7 +56,7 @@ declare module 'react-native-actions-sheet' {
             payload: {
                 id: string;
                 data?: Child;
-                context?: 'home' | 'playlist' | 'album' | 'nowPlaying' | 'search';
+                context?: 'home' | 'playlist' | 'album' | 'nowPlaying' | 'search' | 'history';
                 contextId?: string;
             },
             returnValue: {

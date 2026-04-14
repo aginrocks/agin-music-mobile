@@ -11,6 +11,7 @@ import { SheetManager } from 'react-native-actions-sheet';
 import * as Haptics from 'expo-haptics';
 import showToast from '@lib/showToast';
 import { useEqualizer } from 'react-native-nitro-player';
+import { usePlaybackHistory } from '@lib/hooks/usePlaybackHistory';
 
 const maxBitRateOptions: SettingSelectOption[] = [
     { label: 'Original', description: 'No transcoding', value: '0', shortLabel: 'Original' },
@@ -44,7 +45,7 @@ const defaultLibraryTabOptions: SettingSelectOption[] = [
     { label: 'Songs', description: 'All songs', value: 'songs', shortLabel: 'Songs' },
 ];
 
-export type SettingId = 'streaming.maxBitRate' | 'streaming.format' | 'storage.clearCache' | 'developer.copyId' | 'ui.toastPosition' | 'ui.autoFocusSearchBar' | 'app.defaultTab' | 'app.defaultLibraryTab' | 'eq.enabled' | 'downloads.wifiOnly' | 'app.persistQueue' | 'downloads.maxBitRate' | 'downloads.format';
+export type SettingId = 'streaming.maxBitRate' | 'streaming.format' | 'storage.clearCache' | 'storage.clearHistory' | 'developer.copyId' | 'ui.toastPosition' | 'ui.autoFocusSearchBar' | 'app.defaultTab' | 'app.defaultLibraryTab' | 'eq.enabled' | 'downloads.wifiOnly' | 'app.persistQueue' | 'downloads.maxBitRate' | 'downloads.format';
 
 const EQ_PRESETS: Record<string, number[]> = {
     Flat:      [0, 0, 0, 0, 0],
@@ -185,6 +186,7 @@ export default function Settings() {
     const cache = useCache();
     const memoryCache = useMemoryCache();
     const [tabsHeight] = useTabsHeight();
+    const { clearHistory } = usePlaybackHistory();
 
     const styles = useMemo(() => StyleSheet.create({
         settings: {
@@ -296,6 +298,32 @@ export default function Settings() {
                             await showToast({
                                 title: 'Cache Cleared',
                                 subtitle: 'The cache has been cleared successfully.',
+                                icon: IconCircleCheck,
+                            });
+                        }}
+                    />
+                    <Setting
+                        id='storage.clearHistory'
+                        type='button'
+                        label='Clear Playback History'
+                        description='Remove all playback history records'
+                        onPress={async () => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                            const confirmed = await SheetManager.show('confirm', {
+                                payload: {
+                                    title: 'Clear Playback History',
+                                    message: 'Are you sure you want to clear your playback history? This action cannot be undone.',
+                                    confirmText: 'Clear',
+                                    cancelText: 'Cancel',
+                                }
+                            });
+                            if (!confirmed) return;
+
+                            await clearHistory();
+
+                            await showToast({
+                                title: 'History Cleared',
+                                subtitle: 'Your playback history has been cleared successfully.',
                                 icon: IconCircleCheck,
                             });
                         }}
